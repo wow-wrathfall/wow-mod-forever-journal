@@ -528,7 +528,9 @@ local function showSection()
 end
 
 local function refresh()
-	if not frame:IsShown() then return end
+	-- Not while the interface is hidden: the frame's OnShow refreshes when it comes back, and a
+	-- section shown now would skip its onShow then.
+	if not frame:IsVisible() then return end
 	showSection()
 	refreshDungeons()
 end

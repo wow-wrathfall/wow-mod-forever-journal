@@ -119,7 +119,10 @@ function methods:ClearFocus() self.__focus = nil end
 -- Model frames: a creature shows (GetModel names a file) only once the client has it cached.
 local cachedCreatures = { [308] = true, [7385] = true, [639] = true }
 local creatureRecordsSent = {}
-function methods:SetCreature(entry) self.__creature = entry end
+function methods:SetModelScale(scale) self.__scale = scale end
+function methods:SetPosition(depth, x, y) self.__x, self.__y = x, y end
+function methods:SetFacing(facing) self.__facing = facing end
+function methods:SetCreature(entry) self.__scaleAtLoad = self.__scale; self.__creature = entry end
 function methods:ClearModel() self.__creature = nil end
 function methods:GetModel()
 	local c = rawget(self, "__creature")
@@ -164,7 +167,10 @@ function GetLocale() return "enUS" end
 local inInstance = false
 function IsInInstance() return inInstance end
 function GetItemIcon() return "Interface\\Icons\\X" end
-function GetCursorPosition() return 0, 0 end
+local cursorX, buttonsDown = 0, {}
+function GetCursorPosition() return cursorX, 0 end
+function IsMouseButtonDown(button) return buttonsDown[button] end
+function time() return math.floor(now or 0) end
 function GetQuestDifficultyColor() return { r = 1, g = 1, b = 0 } end
 function PanelTemplates_TabResize() end
 function PanelTemplates_SelectTab(t) t.__selected = true end
@@ -949,6 +955,31 @@ step("mounts: summon, filters, search", function ()
 	stallion.__scripts.OnClick(stallion)
 	tick(0.2)
 	assert(model.__creature == 308 and not model.lockLayer:IsVisible() and model.__ambient == 0.7, "back on a collected one: still locked")
+	-- The view: remembered per creature, and every load starts from neutral.
+	assert(JournalDB.modelViews == ModelViewLib.views, "views aren't saved with the journal")
+	assert(model.__scale == 1, "an untouched mount isn't at the default view")
+	model.__scripts.OnMouseWheel(model, -1)
+	local zoomed = model.__scale
+	assert(zoomed < 1, "the wheel didn't zoom out")
+	horse.__scripts.OnClick(horse)
+	tick(0.2)
+	assert(model.__creature == 284 and model.__scaleAtLoad == 1 and model.__scale == 1, "the next mount didn't load from neutral")
+	stallion.__scripts.OnClick(stallion)
+	tick(0.2)
+	assert(model.__creature == 308 and model.__scaleAtLoad == 1 and model.__scale == zoomed, "the view didn't come back")
+	model.__scripts.OnMouseDown(model, "MiddleButton")
+	assert(model.__scale == 1 and not ModelViewLib.views[308], "a middle click didn't reset it")
+	-- Closed window, an event refreshes the page: nothing loads, and the next show does.
+	model.__scripts.OnMouseWheel(model, -1)
+	model.__scripts.OnHide(model)
+	model.__shown = false
+	model.__creature = nil
+	J.ShowCreature(model, 308)
+	assert(model.__creature == nil and not model.shownEntry, "a hidden model loaded")
+	model.__shown = true
+	J.ShowCreature(model, 308)
+	assert(model.__creature == 308 and model.__scaleAtLoad == 1 and model.__scale == zoomed, "showing it again lost the view")
+	model.__scripts.OnMouseDown(model, "MiddleButton")
 	-- Dragged to an action bar: the companion, as the stock Mounts tab hands it over.
 	stallion.__scripts.OnDragStart(stallion)
 	assert(picked == "MOUNT:1", "dragging a collected mount didn't pick it up: " .. tostring(picked))

@@ -44,7 +44,7 @@ Category: Interface
 - **Dungeons** and **Raids** are tabs of their own; everything the dungeon journal showed is still
   there.
 - New **Mounts** and **Pets** tabs: every mount and companion pet on the realm, collected ones first,
-  with a 3D model you can turn and a Summon button. For the ones you're missing, **where to get
+  with a 3D model you can turn, zoom and move, and a Summon button. For the ones you're missing, **where to get
   them**: the vendor (click to flag them on your map), the price in gold, honor, arena points or
   tokens, the boss or creature that drops it with its drop chance (click a boss to open it in the
   Dungeons tab), the quest and who starts it, the achievement, the profession recipe, or the
@@ -76,7 +76,7 @@ opened carry a lock and the stage they open at.
 rares come last. On the right, the difficulty menu and four tabs:
 - **Overview**: with no boss picked, the instance's difficulties with your lockout on each, what
   it takes to enter, the entrance (with a map flag), wings and a summary of its quests. With a boss
-  picked, its model (drag to turn it), level, health, the creatures fought in the encounter, its
+  picked, its model (drag to turn it, the wheel to zoom), level, health, the creatures fought in the encounter, its
   enrage timer ("Berserk after 10 min") and what it gives besides its loot.
 - **Abilities**: per creature, each ability with icon, cast time, tags and description. Spells
   whose tooltip has no description get a short one written from what the spell does; the realm's
@@ -188,7 +188,7 @@ with a lock on those your progression stage hasn't opened. A search box, a Filte
 collected count sit above it. Ones nothing on the realm gives yet are left out of the list and the
 count, so it shows what you can go and get (and whatever you already have); **Show unobtainable**
 in the Filter menu brings them back. On the right, the one you picked:
-- its **model** (drag to turn it; toys show their icon and what using them does), whether it's for
+- its **model** (drag to turn it, right-drag to move it, the wheel to zoom, middle-click to reset; the view is remembered for each creature, for the whole account, and shared with the Trading Post and Beast Collection addons; toys show their icon and what using them does), whether it's for
   one faction or class, a ground, flying, or ground and flying mount (Invincible, the Headless
   Horseman's Mount...), and a **Summon**, **Dismount**, **Use** or **Equip** (trinket toys) button
   when you have it. A toy in your bank counts as collected and says so; take it out to use it;

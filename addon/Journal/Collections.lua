@@ -620,21 +620,8 @@ local function buildTab(kind, panel)
 	-- Below the gold ornament's flourishes with DragonUI.
 	model:SetPoint("TOPLEFT", right, "TOPLEFT", 8, CO and -86 or -60)
 	model:SetPoint("BOTTOMRIGHT", right, "BOTTOMRIGHT", -8, SOURCES_HEIGHT + 8)
-	model:EnableMouse(true)
-	model.facing = 0.5
-	model:SetScript("OnMouseDown", function (self, btn)
-		if btn == "LeftButton" then self.dragging = GetCursorPosition() end
-	end)
-	model:SetScript("OnMouseUp", function (self) self.dragging = nil end)
-	model:SetScript("OnUpdate", function (self)
-		if self.dragging then
-			local x = GetCursorPosition()
-			self.facing = self.facing + (x - self.dragging) / 80
-			self.dragging = x
-			self:SetFacing(self.facing)
-		end
-	end)
 	model:SetScript("OnHide", function (self) self.shownEntry = nil end)
+	ModelViewLib.Wire(model, 0.5)
 	-- DragonUI's backdrop already runs behind the whole pane.
 	if not CO then
 		local modelBg = right:CreateTexture(nil, "BACKGROUND", nil, 1)
@@ -644,9 +631,8 @@ local function buildTab(kind, panel)
 		modelBg:SetTexCoord(0, 0.6, 0, 0.55)
 		modelBg:SetVertexColor(0.35, 0.32, 0.3)
 	end
-	local modelHint = model:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	modelHint:SetPoint("BOTTOMLEFT", model, "BOTTOMLEFT", 6, 4)
-	modelHint:SetText("Drag to turn")
+	-- Stops short of the Summon button and its Auto-summon check.
+	ModelViewLib.AddHint(model, 250)
 
 	-- Toys have no model: their icon and what using them does.
 	local toyIcon = right:CreateTexture(nil, "ARTWORK")

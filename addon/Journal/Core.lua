@@ -492,6 +492,7 @@ events:SetScript("OnEvent", function (self, event, ...)
 			JournalDB.cache = JournalDB.cache or { bosses = {}, loot = {} }
 			JournalDB.minimap = JournalDB.minimap or { angle = 200 }
 			JournalCharDB = JournalCharDB or {}
+			ModelViewLib.Bind(JournalDB)
 		end
 	elseif event == "PLAYER_LOGIN" then
 		J.Fire("LOGIN")

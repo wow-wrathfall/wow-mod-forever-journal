@@ -430,7 +430,7 @@ local function askRecord(entry)
 end
 
 local function frameCreature(model)
-	model:SetFacing(model.facing or 0.5)
+	ModelViewLib.Frame(model, model.shownEntry)
 	if model.SetLight then model:SetLight(unpack(model.locked and MODEL_DIM or MODEL_LIGHT)) end
 end
 
@@ -482,9 +482,16 @@ end
 
 -- Shows a creature in a model frame; locked dims it and adds the padlock. Entry nil or 0 clears it.
 function J.ShowCreature(model, entry, locked)
+	-- Events refresh a page whose window is closed. The frame's OnShow comes back for it.
+	if not model:IsVisible() then
+		model.shownEntry = nil
+		modelLoader.pending[model] = nil
+		return
+	end
 	locked = locked and true or false
 	if locked or model.lockLayer then J.SetShown(modelLock(model), locked and entry and entry ~= 0) end
 	if not entry or entry == 0 then
+		ModelViewLib.BeforeLoad(model)
 		model:ClearModel()
 		model.shownEntry = nil
 		modelLoader.pending[model] = nil
@@ -495,6 +502,7 @@ function J.ShowCreature(model, entry, locked)
 	if model.shownEntry ~= entry then
 		model.shownEntry = entry
 		model.tries = 0
+		ModelViewLib.BeforeLoad(model)
 		model:ClearModel()
 		model:SetCreature(entry)
 	elseif not relight then

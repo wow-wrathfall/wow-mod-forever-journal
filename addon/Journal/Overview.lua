@@ -99,32 +99,15 @@ local model = CreateFrame("PlayerModel", nil, pane)
 model:SetPoint("TOPLEFT", pane, "TOPLEFT", 4, -4)
 model:SetPoint("TOPRIGHT", pane, "TOPRIGHT", -26, -4)
 model:SetHeight(MODEL_HEIGHT)
-model:EnableMouse(true)
-model.facing = 0.4
-model:SetScript("OnMouseDown", function (self, btn)
-	if btn == "LeftButton" then
-		self.dragging = GetCursorPosition()
-	end
-end)
-model:SetScript("OnMouseUp", function (self) self.dragging = nil end)
-model:SetScript("OnUpdate", function (self)
-	if self.dragging then
-		local x = GetCursorPosition()
-		self.facing = self.facing + (x - self.dragging) / 80
-		self.dragging = x
-		self:SetFacing(self.facing)
-	end
-end)
 model:SetScript("OnHide", function (self) self.shownEntry = nil end)
+ModelViewLib.Wire(model, 0.4)
 local modelBg = pane:CreateTexture(nil, "BACKGROUND")
 modelBg:SetPoint("TOPLEFT", model, "TOPLEFT")
 modelBg:SetPoint("BOTTOMRIGHT", model, "BOTTOMRIGHT")
 modelBg:SetTexture("Interface\\LFGFrame\\UI-LFG-BACKGROUND-QUESTPAPER")
 modelBg:SetTexCoord(0, 0.6, 0, 0.55)
 modelBg:SetVertexColor(0.35, 0.32, 0.3)
-local modelHint = model:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-modelHint:SetPoint("BOTTOMRIGHT", model, "BOTTOMRIGHT", -6, 4)
-modelHint:SetText("Drag to turn")
+ModelViewLib.AddHint(model)
 
 -- Shows or hides the model; the scroll area starts below it while it shows.
 local function setModelShown(shown)

@@ -56,6 +56,10 @@ Category: Interface
   Dancing Flames...), which ones are in your bags or bank, a Use button and where to get the rest.
 - Filters: collected or not, usable by your character, mount type, and by source (vendor, drop,
   quest, achievement, profession, world event...). A search box on each tab.
+- **Sort by** name, **newest first** or **oldest first**: by when you first had each mount, pet or
+  toy. Neither the client nor the server keeps that date, so the journal notes it the first time it
+  sees one (mounts and pets for the account, toys for each character); what you had before then
+  counts as the oldest. Clicking LearnedAlert's New Mount or New Pet toast opens the tab on it.
 - On progression realms, mounts, pets and toys your stage hasn't opened yet carry a lock and the
   stage they open at.
 - The old DungeonJournal addon turns itself off the first time the Journal loads.

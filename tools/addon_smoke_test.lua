@@ -160,6 +160,7 @@ local lastMenu
 function EasyMenu(items) lastMenu = items end
 function CloseDropDownMenus() end
 function UnitName() return "Tester" end
+function GetRealmName() return "Evermore" end
 function UnitRace() return "Human", "Human" end
 function UnitClass() return "Warrior", "WARRIOR" end
 function UnitSex() return 2 end
@@ -1048,6 +1049,53 @@ step("goal tracker: set, where to go, kills, collected", function ()
 	assert(JournalCharDB.goal == nil, "goal not cleared once collected")
 	assert(not JournalGoalTracker:IsVisible(), "tracker still up")
 	assert(played == "LEVELUPSOUND", "no cheer")
+	table.remove(companions.MOUNT)
+	fire("COMPANION_LEARNED")
+	tick(1)
+end)
+
+step("mounts: sort by newest and oldest, open on a new one", function ()
+	-- The Black Stallion was there at login (dated 0); the Brown Horse is learned now.
+	local at = JournalDB.acquired and JournalDB.acquired.Evermore and JournalDB.acquired.Evermore.mounts
+	assert(at and at.at[470] == 0, "a mount had at login isn't dated as before the count")
+	tick(5)
+	table.insert(companions.MOUNT, { 284, "Brown Horse", 458, "Interface\\Icons\\M", false })
+	fire("COMPANION_LEARNED")
+	tick(1)
+	assert((at.at[458] or 0) > 0, "a mount learned while playing isn't dated")
+	local catalog
+	J.LoadCatalog("mounts", function (c) catalog = c end)
+	local f = J.Filters("mounts")
+	local function first() return (J.FilteredEntries("mounts", catalog, ""))[1].id end
+	assert(first() == 470, "by name: Black Stallion first")
+	f.sort = "newest"
+	assert(first() == 458, "newest first: the Brown Horse should lead")
+	f.sort = "oldest"
+	assert(first() == 470, "oldest first: the Black Stallion should lead")
+	local list = J.FilteredEntries("mounts", catalog, "")
+	assert(not list[#list].mine, "an uncollected one sorted above a collected one")
+	f.sort = nil
+	-- The sort is offered in the Filter menu.
+	local filter = buttonShown("Filter")
+	filter.__scripts.OnClick(filter)
+	local offered = {}
+	for _, item in ipairs(lastMenu or {}) do offered[item.text] = item end
+	assert(offered["Sort by"] and offered["Newest first"] and offered["Oldest first"], "no Sort by in the Filter menu")
+	offered["Newest first"].func()
+	assert(f.sort == "newest", "picking Newest first didn't set the sort")
+	f.sort = nil
+	-- LearnedAlert's toast: the journal opens on it, scrolled to it, past a filter that hid it.
+	JournalFrame:Hide()
+	f.collected = false
+	local scroll = find(function (x) return x.__kind == "ScrollFrame" and (x.__name or ""):find("CollectionScroll") end)
+	scroll.__offset = 3
+	assert(Journal.ShowCollection("MOUNT", 458), "ShowCollection refused")
+	tick(0.5)
+	assert(JournalFrame:IsShown() and J.view.section == "mounts", "the toast didn't open the Mounts tab")
+	assert(f.collected, "the collected filter still hides the new mount")
+	assert(JournalCharDB.collectionSelected.mounts == 458, "the new mount isn't selected")
+	assert(textShown("^Brown Horse$") and FauxScrollFrame_GetOffset(scroll) == 0, "the list wasn't scrolled to it")
+	assert(not Journal.ShowCollection("nothing", 1), "an unknown kind was accepted")
 	table.remove(companions.MOUNT)
 	fire("COMPANION_LEARNED")
 	tick(1)

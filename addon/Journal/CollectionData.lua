@@ -105,6 +105,8 @@ end
 
 local owned = { mounts = {}, pets = {}, toys = {} }
 local ownedToysAt = nil
+-- Dates what is owned (below, with the Newest / Oldest sort).
+local stampOwned
 
 -- Mounts and pets: spell -> companion index (and creature), read from the client.
 local function readCompanions()
@@ -163,14 +165,100 @@ function J.RefreshToys(done)
 			-- "<item>,<in bags>"; a server without the second field only counted the bags and bank.
 			for _, r in ipairs(result.rows) do have[r[1]] = r[2] == nil and 1 or r[2] end
 			owned.toys = have
+			stampOwned("toys")
 			J.Fire("COLLECTION_OWNED", "toys")
 		end
 		if done then done() end
 	end)
 end
 
+-----------------------------------------
+-- when each one was first had, for the Newest / Oldest sort
+
+-- Neither the client nor the server keeps a date (accountwide_mounts is account and spell, a toy is
+-- an item in the bags), so the journal notes the first time it sees each one: os time, or 0 for
+-- one that was there before it kept count. Mounts and pets are the account's (the realm shares
+-- them), so per realm in JournalDB; toys sit in one character's bags, so per character.
+local function stamps(kind)
+	local root
+	if kind == "toys" then
+		JournalCharDB.acquired = JournalCharDB.acquired or {}
+		root = JournalCharDB.acquired
+	else
+		JournalDB.acquired = JournalDB.acquired or {}
+		local realm = GetRealmName() or "?"
+		JournalDB.acquired[realm] = JournalDB.acquired[realm] or {}
+		root = JournalDB.acquired[realm]
+	end
+	local s = root[kind]
+	if not s then
+		s = { at = {}, characters = {} }
+		root[kind] = s
+	end
+	return s
+end
+
+-- The first-acquired time of one this character has, or nil when the journal hasn't noted it yet.
+function J.AcquiredAt(kind, e)
+	return stamps(kind).at[e.id]
+end
+
+-- Until a few seconds after login the companion list can still be filling in, and a pass over a
+-- short list would date the rest as new.
+local stampsReady = false
+
+-- Notes a time for each one owned that has none. A character's first pass dates what it has as 0,
+-- as LearnedAlert's first scan does: so an alt with two mounts, the first to log in, can't leave
+-- the main's fifty to be dated today. Anything the character turns up later is new, even one it
+-- was gifted while logged out.
+stampOwned = function (kind, ids)
+	local s = stamps(kind)
+	local me = UnitName("player") or "?"
+	local first = not s.characters[me]
+	local now = time()
+	for id in pairs(ids or owned[kind]) do
+		if s.at[id] == nil then s.at[id] = first and 0 or now end
+	end
+	s.characters[me] = true
+end
+
+-- A toy that lands in the bags is dated on the spot, without asking the server: the bags against
+-- the toy catalog (kept across sessions). Only once the server's list has given this character its
+-- first pass, or every toy it carries today would be dated now.
+local function stampToysInBags()
+	local s = stamps("toys")
+	if not s.characters[UnitName("player") or "?"] or not GetContainerItemID then return end
+	J.LoadCatalog("toys", function (catalog)
+		if not catalog then return end
+		local found
+		for bag = 0, NUM_BAG_SLOTS do
+			for slot = 1, GetContainerNumSlots(bag) do
+				local item = GetContainerItemID(bag, slot)
+				if item and catalog.byId[item] and s.at[item] == nil then
+					found = found or {}
+					found[item] = true
+				end
+			end
+		end
+		if found then stampOwned("toys", found) end
+	end)
+end
+
+J.On("LOGIN", function ()
+	J.After(5, function ()
+		stampsReady = true
+		readCompanions()
+		stampOwned("mounts")
+		stampOwned("pets")
+	end)
+end)
+
 J.On("COMPANIONS", function ()
 	readCompanions()
+	if stampsReady then
+		stampOwned("mounts")
+		stampOwned("pets")
+	end
 	J.Fire("COLLECTION_OWNED", "mounts")
 	J.Fire("COLLECTION_OWNED", "pets")
 end)
@@ -178,12 +266,14 @@ end)
 J.On("BAGS", function ()
 	ownedToysAt = nil
 	if J.frame:IsShown() and J.view.section == "toys" then J.RefreshToys() end
+	if J.Has(J.HELLO_COLLECTIONS) then stampToysInBags() end
 end)
 
 -----------------------------------------
 -- filters, kept per character and kind
 
 -- unobtainable: also list what nothing on the realm gives yet (whatever the character has always shows).
+-- sort: nil (by name), "newest" or "oldest" (by when first had).
 local DEFAULT_FILTERS = { collected = true, missing = true, usable = false, hideLocked = false, unobtainable = false, sources = {} }
 
 function J.Filters(kind)
@@ -254,7 +344,8 @@ local function withOwned(kind, catalog)
 end
 
 -- The catalog's entries the filters and the search text let through, collected ones first,
--- then by name. Entries the client can't name (spells it doesn't have) are left out.
+-- then by name (or by when they were first had, as the filter menu's Sort by asks). Entries the
+-- client can't name (spells it doesn't have) are left out.
 function J.FilteredEntries(kind, catalog, text)
 	local f = J.Filters(kind)
 	local anySource = next(f.sources) ~= nil
@@ -291,8 +382,20 @@ function J.FilteredEntries(kind, catalog, text)
 			end
 		end
 	end
+	-- Newest / Oldest: the collected ones by when they were first had, the rest by name after them.
+	-- One owned but not dated yet (the first seconds after login) counts as newest; the ones from
+	-- before the journal kept count (0) are the oldest, by name among themselves.
+	local at = (f.sort == "newest" or f.sort == "oldest") and stamps(kind).at
+	local newest = f.sort == "newest"
 	table.sort(out, function (a, b)
 		if a.mine ~= b.mine then return a.mine end
+		if at and a.mine then
+			local ta, tb = at[a.id] or math.huge, at[b.id] or math.huge
+			if ta ~= tb then
+				if newest then return ta > tb end
+				return ta < tb
+			end
+		end
 		if a.sortName ~= b.sortName then return a.sortName < b.sortName end
 		return a.id < b.id
 	end)

@@ -309,6 +309,17 @@ local function buildTab(kind, panel)
 				end })
 			end
 		end
+		table.insert(items, { text = "Sort by", isTitle = true, notCheckable = true })
+		for _, s in ipairs({ { nil, "Name" }, { "newest", "Newest first" }, { "oldest", "Oldest first" } }) do
+			table.insert(items, { text = s[2], checked = f.sort == s[1],
+				tooltipTitle = s[1] and s[2] or nil,
+				tooltipText = s[1] and ("By when you first had it. The journal starts counting the first time it sees "
+					.. "your collection: what you had before then is the oldest, in name order.") or nil,
+				func = function ()
+					f.sort = s[1]
+					J.Fire("COLLECTION_FILTER", kind)
+				end })
+		end
 		table.insert(items, { text = "Sources (none ticked: all)", isTitle = true, notCheckable = true })
 		for _, src in ipairs(J.SOURCE) do
 			table.insert(items, { text = src.name, checked = f.sources[src.bit] and true or false, keepShownOnClick = true,
@@ -391,6 +402,12 @@ local function buildTab(kind, panel)
 
 	local rows = {}
 	local render
+
+	-- One the catalog leaves out but the character has sits in its extras (CollectionData.lua).
+	local function entryById(id)
+		local c = state.catalog
+		return c and (c.byId[id] or (c.extras and c.extras[id])) or nil
+	end
 
 	local function select(e)
 		state.selected = e
@@ -997,8 +1014,9 @@ local function buildTab(kind, panel)
 		body:Show()
 		local have, total
 		state.entries, have, total = J.FilteredEntries(kind, state.catalog, search:GetText())
-		if favKind then
+		if favKind and not J.Filters(kind).sort then
 			-- Favourites first, the rest in the order they came: DragonUI's window sorts the same way.
+			-- Not when sorting by Newest / Oldest, which is asked for to see that order.
 			local favs, rest = {}, {}
 			for _, e in ipairs(state.entries) do table.insert(isFavorite(e) and favs or rest, e) end
 			for _, e in ipairs(rest) do table.insert(favs, e) end
@@ -1006,12 +1024,14 @@ local function buildTab(kind, panel)
 		end
 		count:SetText(string.format("Collected: |cffffffff%d|r / %d", have, total))
 		if not state.selected and JournalCharDB.collectionSelected then
-			state.selected = state.catalog.byId[JournalCharDB.collectionSelected[kind] or -1]
+			state.selected = entryById(JournalCharDB.collectionSelected[kind] or -1)
 		end
 		-- A selection the filters now hide gives way to the first one shown.
-		local listed = false
-		for _, e in ipairs(state.entries) do if e == state.selected then listed = true break end end
+		local listed
+		for i, e in ipairs(state.entries) do if e == state.selected then listed = i break end end
 		if not listed then state.selected = state.entries[1] end
+		local revealAt = state.reveal and listed
+		state.reveal = nil
 		if #state.entries == 0 then
 			empty:SetText(total == 0 and ("No " .. info.name:lower() .. " on this realm") or "Nothing matches the filters")
 			empty:Show()
@@ -1019,6 +1039,18 @@ local function buildTab(kind, panel)
 			empty:Hide()
 		end
 		renderList()
+		-- Opened on one entry: scroll the list to it when it's out of view. Through the scroll bar,
+		-- after renderList has set its range, so the bar and the rows agree.
+		if revealAt then
+			local offset = FauxScrollFrame_GetOffset(scroll)
+			if revealAt <= offset or revealAt > offset + rowCount then
+				offset = math.max(0, math.min(revealAt - 1, #state.entries - rowCount))
+				FauxScrollFrame_SetOffset(scroll, offset)
+				local bar = _G[scrollName .. "ScrollBar"]
+				if bar then bar:SetValue(offset * rowHeight) end
+				renderList()
+			end
+		end
 		renderDetail()
 	end
 
@@ -1070,16 +1102,29 @@ local function buildTab(kind, panel)
 	J.On("LOCKOUTS_CHANGED", function () if shown() then render() end end)
 	if kind == "pets" then J.On("AUTO_SUMMON", function () if shown() then render() end end) end
 	J.On("GOAL_CHANGED", function () if shown() then syncGoal() end end)
-	-- The goal tracker opens the tab on one entry: show it, whatever the search box held.
+	-- The goal tracker and LearnedAlert's New Mount toast open the tab on one entry: show it,
+	-- whatever the search box held, scrolled into view.
 	J.On("COLLECTION_SELECT", function (k, id)
 		if k ~= kind then return end
 		JournalCharDB.collectionSelected = JournalCharDB.collectionSelected or {}
 		JournalCharDB.collectionSelected[kind] = id
-		state.selected = state.catalog and state.catalog.byId[id] or nil
+		state.selected = entryById(id)
+		state.reveal = true
+		-- Cleared without the search's debounce, which would scroll the list back to the top.
+		lastText = ""
 		if (search:GetText() or "") ~= "" then search:SetText("") end
-		-- Filters that would hide a goal (one not collected yet, for this character) let it through.
+		-- Filters that would hide it let it through: a goal is one not collected yet (and usable by
+		-- this character), a new mount one that is (which may be the other faction's, shared by the
+		-- account). Owned read from the client's list now: the toast can beat the COMPANIONS refresh.
 		local f = J.Filters(kind)
-		f.missing, f.hideLocked, f.mountType = true, false, nil
+		local mine
+		if kind == "toys" then mine = J.Owned(kind, { id = id }) else mine = J.CompanionNow(kind, { id = id }) ~= nil end
+		if mine then
+			f.collected, f.usable = true, false
+		else
+			f.missing = true
+		end
+		f.hideLocked, f.mountType = false, nil
 		wipe(f.sources)
 		if shown() then render() end
 	end)
@@ -1103,6 +1148,18 @@ function J.ItemUseText(item)
 		end
 	end
 	return #parts > 0 and table.concat(parts, "\n") or nil
+end
+
+-- For other addons (LearnedAlert's New Mount and New Pet toasts): opens the tab on one entry, by
+-- spell (mounts, pets) or item (toys). kind: "mounts", "pets", "toys", or the client's "MOUNT" /
+-- "CRITTER". False when the realm has no collections to show, so the caller can open its own.
+local KIND_ALIASES = { MOUNT = "mounts", CRITTER = "pets" }
+function Journal.ShowCollection(kind, id)
+	kind = KIND_ALIASES[kind] or kind
+	if not J.KINDS[kind] or J.ServerStatus() or not J.Has(J.HELLO_COLLECTIONS) then return false end
+	if not Journal.OpenTab(kind) then return false end
+	if id then J.Fire("COLLECTION_SELECT", kind, id) end
+	return true
 end
 
 for _, def in ipairs({
